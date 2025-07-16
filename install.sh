@@ -45,10 +45,16 @@ print_header() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 
 # Determine target directory (where to install)
+# Check current directory first, then parent directory (for submodule usage)
 if [[ -f "package.json" ]] || [[ -f "pyproject.toml" ]] || [[ -f "Cargo.toml" ]] || [[ -f "go.mod" ]] || [[ -d ".git" ]]; then
     TARGET_DIR="$(pwd)"
+elif [[ -f "../package.json" ]] || [[ -f "../pyproject.toml" ]] || [[ -f "../Cargo.toml" ]] || [[ -f "../go.mod" ]] || [[ -d "../.git" ]]; then
+    TARGET_DIR="$(cd .. && pwd)"
+    print_info "Detected project in parent directory: $TARGET_DIR"
 else
-    print_error "No project detected in current directory. Please run from a project root."
+    print_error "No project detected in current directory or parent directory."
+    print_info "Please run from a project root, or from within the .claude-commands submodule."
+    print_info "Expected files: package.json, pyproject.toml, Cargo.toml, go.mod, or .git directory"
     exit 1
 fi
 

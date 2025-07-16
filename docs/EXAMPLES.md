@@ -547,7 +547,7 @@ jobs:
       - name: Setup Claude Commands
         run: |
           git submodule update --init --recursive
-          cd .claude-commands && ./install.sh
+          ./.claude-commands/install.sh
       
       - name: Run Automated Review
         run: |

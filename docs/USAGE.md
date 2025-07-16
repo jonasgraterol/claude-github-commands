@@ -29,7 +29,7 @@ Before using Claude GitHub Commands, ensure you have:
    ```bash
    # As submodule (recommended)
    git submodule add https://github.com/your-username/claude-github-commands .claude-commands
-   cd .claude-commands && ./install.sh
+   ./.claude-commands/install.sh
    
    # Or direct installation
    git clone https://github.com/your-username/claude-github-commands

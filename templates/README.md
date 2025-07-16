@@ -44,7 +44,7 @@ Each template includes:
 3. **Install Commands**:
    ```bash
    git submodule add https://github.com/your-username/claude-github-commands .claude-commands
-   cd .claude-commands && ./install.sh
+   ./.claude-commands/install.sh
    ```
 
 ### Option 2: Automated Setup (Future Enhancement)
@@ -266,7 +266,7 @@ npm install
 
 # 5. Set up Claude Commands
 git submodule add https://github.com/your-username/claude-github-commands .claude-commands
-cd .claude-commands && ./install.sh
+./.claude-commands/install.sh
 
 # 6. Start development
 npm run dev
@@ -296,7 +296,7 @@ git add .
 git commit -m "initial: bootstrap Python project from template"
 
 git submodule add https://github.com/your-username/claude-github-commands .claude-commands
-cd .claude-commands && ./install.sh
+./.claude-commands/install.sh
 
 # 6. Start development
 python -m pytest
