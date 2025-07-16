@@ -1,0 +1,392 @@
+# GitHub Workflow Automation Hooks
+# This file defines automation hooks for Claude Code GitHub commands
+# These hooks execute automatically during various development workflow events
+
+[hooks]
+
+# Pre-commit hook: Auto-format and lint before commits
+[hooks.pre-commit]
+description = "Auto-format code and run linting before commits"
+enabled = true
+trigger = "before_commit"
+command = """
+# Run formatting and linting
+if command -v npm &> /dev/null && [[ -f "package.json" ]]; then
+    echo "🔧 Running ESLint auto-fix..."
+    npm run lint:fix 2>/dev/null || npx eslint --fix src/ 2>/dev/null || true
+    
+    echo "🎨 Running Prettier formatting..."
+    npm run format 2>/dev/null || npx prettier --write src/ 2>/dev/null || true
+fi
+
+if command -v python3 &> /dev/null && [[ -f "pyproject.toml" ]]; then
+    echo "🔧 Running Ruff formatting..."
+    python -m ruff format . 2>/dev/null || true
+    python -m ruff check --fix . 2>/dev/null || true
+fi
+
+echo "✅ Pre-commit formatting completed"
+"""
+
+# Post-commit hook: Notify about successful commit
+[hooks.post-commit]
+description = "Provide feedback after successful commits"
+enabled = true
+trigger = "after_commit"
+command = """
+COMMIT_HASH=$(git rev-parse --short HEAD)
+COMMIT_MESSAGE=$(git log -1 --pretty=%s)
+
+echo "🎉 Commit successful!"
+echo "📝 $COMMIT_HASH: $COMMIT_MESSAGE"
+echo "💡 Next: git push to share your changes"
+"""
+
+# Pre-push hook: Run tests before pushing
+[hooks.pre-push]
+description = "Run tests and quality checks before pushing"
+enabled = true
+trigger = "before_push"
+command = """
+echo "🧪 Running pre-push quality checks..."
+
+# Run tests if available
+if command -v npm &> /dev/null && [[ -f "package.json" ]]; then
+    if npm run test 2>/dev/null; then
+        echo "✅ JavaScript tests passed"
+    else
+        echo "⚠️  JavaScript tests failed or not configured"
+    fi
+fi
+
+if command -v python3 &> /dev/null && [[ -f "pyproject.toml" ]]; then
+    if python -m pytest 2>/dev/null; then
+        echo "✅ Python tests passed"
+    else
+        echo "⚠️  Python tests failed or not configured"
+    fi
+fi
+
+# Run linting
+echo "🔍 Running linting checks..."
+if command -v npm &> /dev/null && [[ -f "package.json" ]]; then
+    npm run lint 2>/dev/null || npx eslint src/ 2>/dev/null || true
+fi
+
+if command -v python3 &> /dev/null && [[ -f "pyproject.toml" ]]; then
+    python -m ruff check . 2>/dev/null || true
+fi
+
+echo "✅ Pre-push checks completed"
+"""
+
+# Post-push hook: Provide next steps
+[hooks.post-push]
+description = "Suggest next actions after pushing"
+enabled = true
+trigger = "after_push"
+command = """
+CURRENT_BRANCH=$(git branch --show-current)
+DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+
+echo "🚀 Push completed successfully!"
+
+if [[ "$CURRENT_BRANCH" != "$DEFAULT_BRANCH" ]]; then
+    echo "💡 You're on branch: $CURRENT_BRANCH"
+    echo "📋 Consider creating a pull request:"
+    echo "   gh pr create --title 'Your PR title' --body 'Description'"
+    echo "   Or use: /workflow command for guided process"
+else
+    echo "📋 You're on $DEFAULT_BRANCH branch"
+    echo "💡 Consider creating a feature branch for new work"
+fi
+"""
+
+# PR creation hook: Auto-assign reviewers and labels
+[hooks.pr-create]
+description = "Automatically configure new pull requests"
+enabled = true
+trigger = "after_pr_create"
+command = """
+PR_NUMBER="$1"
+
+if [[ -n "$PR_NUMBER" ]]; then
+    echo "🔧 Configuring PR #$PR_NUMBER..."
+    
+    # Auto-assign labels based on branch name
+    BRANCH_NAME=$(git branch --show-current)
+    
+    case "$BRANCH_NAME" in
+        feature/*)
+            gh pr edit "$PR_NUMBER" --add-label "feature" 2>/dev/null || true
+            ;;
+        fix/*|bugfix/*)
+            gh pr edit "$PR_NUMBER" --add-label "bug" 2>/dev/null || true
+            ;;
+        docs/*)
+            gh pr edit "$PR_NUMBER" --add-label "documentation" 2>/dev/null || true
+            ;;
+        hotfix/*)
+            gh pr edit "$PR_NUMBER" --add-label "hotfix,priority-high" 2>/dev/null || true
+            ;;
+    esac
+    
+    # Auto-assign to PR author
+    gh pr edit "$PR_NUMBER" --add-assignee @me 2>/dev/null || true
+    
+    echo "✅ PR configuration completed"
+else
+    echo "⚠️  No PR number provided"
+fi
+"""
+
+# Issue assignment hook: Notify when assigned to issues
+[hooks.issue-assign]
+description = "Actions when assigned to GitHub issues"
+enabled = true
+trigger = "on_issue_assign"
+command = """
+ISSUE_NUMBER="$1"
+
+if [[ -n "$ISSUE_NUMBER" ]]; then
+    echo "📋 Assigned to issue #$ISSUE_NUMBER"
+    
+    # Get issue details
+    ISSUE_TITLE=$(gh issue view "$ISSUE_NUMBER" --json title -q .title 2>/dev/null)
+    
+    echo "📝 Issue: $ISSUE_TITLE"
+    echo "💡 Quick start:"
+    echo "   /issue $ISSUE_NUMBER  - Start working on this issue"
+    echo "   /workflow $ISSUE_NUMBER  - Full development workflow"
+fi
+"""
+
+# Code review hook: Actions when PR review is requested
+[hooks.review-request]
+description = "Actions when code review is requested"
+enabled = true
+trigger = "on_review_request"
+command = """
+PR_NUMBER="$1"
+
+if [[ -n "$PR_NUMBER" ]]; then
+    echo "👀 Review requested for PR #$PR_NUMBER"
+    
+    # Get PR details
+    PR_TITLE=$(gh pr view "$PR_NUMBER" --json title -q .title 2>/dev/null)
+    
+    echo "📝 PR: $PR_TITLE"
+    echo "💡 Review commands:"
+    echo "   /pr-review $PR_NUMBER  - Automated review process"
+    echo "   gh pr checkout $PR_NUMBER  - Checkout PR branch"
+    echo "   gh pr view $PR_NUMBER  - View PR details"
+fi
+"""
+
+# Deployment hook: Actions before deployment
+[hooks.pre-deploy]
+description = "Quality checks before deployment"
+enabled = false  # Disabled by default
+trigger = "before_deploy"
+command = """
+echo "🚀 Running pre-deployment checks..."
+
+# Ensure we're on main/master branch
+CURRENT_BRANCH=$(git branch --show-current)
+DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+
+if [[ "$CURRENT_BRANCH" != "$DEFAULT_BRANCH" ]]; then
+    echo "❌ Not on $DEFAULT_BRANCH branch (currently on $CURRENT_BRANCH)"
+    exit 1
+fi
+
+# Run full test suite
+echo "🧪 Running comprehensive tests..."
+if command -v npm &> /dev/null && [[ -f "package.json" ]]; then
+    npm run test:ci 2>/dev/null || npm test || {
+        echo "❌ Tests failed"
+        exit 1
+    }
+fi
+
+# Build production assets
+echo "🏗️  Building production assets..."
+if command -v npm &> /dev/null && [[ -f "package.json" ]]; then
+    npm run build || {
+        echo "❌ Build failed"
+        exit 1
+    }
+fi
+
+echo "✅ Pre-deployment checks passed"
+"""
+
+# Security audit hook: Check for vulnerabilities
+[hooks.security-audit]
+description = "Security vulnerability scanning"
+enabled = true
+trigger = "weekly"  # Runs weekly
+command = """
+echo "🔒 Running security audit..."
+
+# Node.js security audit
+if command -v npm &> /dev/null && [[ -f "package.json" ]]; then
+    echo "🔍 Checking npm packages for vulnerabilities..."
+    npm audit --audit-level moderate
+fi
+
+# Python security audit
+if command -v pip &> /dev/null && [[ -f "requirements.txt" ]]; then
+    if command -v safety &> /dev/null; then
+        echo "🔍 Checking Python packages for vulnerabilities..."
+        safety check
+    else
+        echo "💡 Install safety for Python security scanning: pip install safety"
+    fi
+fi
+
+# Git secrets check
+echo "🔍 Checking for potential secrets in recent commits..."
+if git log --oneline -10 | grep -E -i "(password|secret|key|token|api)" 2>/dev/null; then
+    echo "⚠️  Found potential secrets in recent commit messages"
+    echo "💡 Review commits for sensitive information"
+fi
+
+echo "✅ Security audit completed"
+"""
+
+# Dependency update hook: Check for outdated dependencies
+[hooks.dependency-update]
+description = "Check for outdated dependencies"
+enabled = true
+trigger = "monthly"  # Runs monthly
+command = """
+echo "📦 Checking for dependency updates..."
+
+# Node.js dependencies
+if command -v npm &> /dev/null && [[ -f "package.json" ]]; then
+    echo "📋 Checking npm packages..."
+    npm outdated || true
+    echo "💡 Update packages with: npm update"
+fi
+
+# Python dependencies
+if command -v pip &> /dev/null && [[ -f "requirements.txt" ]]; then
+    if command -v pip-review &> /dev/null; then
+        echo "📋 Checking Python packages..."
+        pip-review --local --interactive
+    else
+        echo "💡 Install pip-review for dependency checking: pip install pip-review"
+    fi
+fi
+
+echo "✅ Dependency check completed"
+"""
+
+# Cleanup hook: Clean up temporary files and artifacts
+[hooks.cleanup]
+description = "Clean up temporary files and build artifacts"
+enabled = true
+trigger = "manual"  # Run manually with /cleanup command
+command = """
+echo "🧹 Cleaning up project..."
+
+# Remove common build artifacts
+echo "🗑️  Removing build artifacts..."
+rm -rf dist/ build/ *.egg-info/ .pytest_cache/ coverage/ .coverage
+rm -rf node_modules/.cache/ .next/ .nuxt/
+
+# Clean up temporary files
+echo "🗑️  Removing temporary files..."
+find . -name "*.pyc" -delete 2>/dev/null || true
+find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+find . -name ".DS_Store" -delete 2>/dev/null || true
+
+# Clean up logs
+echo "🗑️  Cleaning up logs..."
+rm -rf logs/ *.log 2>/dev/null || true
+
+# Git cleanup
+echo "🗑️  Git cleanup..."
+git gc --quiet
+git prune --quiet
+
+echo "✅ Cleanup completed"
+"""
+
+# Performance monitoring hook: Track build and test times
+[hooks.performance-monitor]
+description = "Monitor build and test performance"
+enabled = false  # Disabled by default
+trigger = "after_test"
+command = """
+echo "📊 Recording performance metrics..."
+
+# Create metrics directory if it doesn't exist
+mkdir -p .metrics
+
+# Record timestamp and performance data
+TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
+BRANCH=$(git branch --show-current)
+COMMIT=$(git rev-parse --short HEAD)
+
+# This would be expanded with actual timing data
+echo "$TIMESTAMP,$BRANCH,$COMMIT,test_time,build_time" >> .metrics/performance.csv
+
+echo "✅ Performance metrics recorded"
+"""
+
+# Documentation hook: Auto-update documentation
+[hooks.doc-update]
+description = "Update documentation when code changes"
+enabled = false  # Disabled by default
+trigger = "before_commit"
+command = """
+echo "📚 Checking documentation updates..."
+
+# Check if code changes require doc updates
+CHANGED_FILES=$(git diff --cached --name-only)
+
+if echo "$CHANGED_FILES" | grep -E "\.(js|ts|py)$" &> /dev/null; then
+    echo "💡 Code changes detected - consider updating documentation"
+    
+    # Auto-generate API docs if tools are available
+    if command -v jsdoc &> /dev/null && [[ -f "jsdoc.json" ]]; then
+        echo "📖 Updating JavaScript documentation..."
+        jsdoc -c jsdoc.json 2>/dev/null || true
+    fi
+    
+    if command -v sphinx-build &> /dev/null && [[ -d "docs/" ]]; then
+        echo "📖 Updating Python documentation..."
+        cd docs && make html 2>/dev/null || true && cd ..
+    fi
+fi
+
+echo "✅ Documentation check completed"
+"""
+
+# Configuration validation
+[validation]
+# Validate that required tools are available
+required_tools = ["git", "gh"]
+optional_tools = ["npm", "python3", "pre-commit"]
+
+# Hook execution settings
+[execution]
+timeout = 300  # 5 minutes
+allow_failure = true  # Continue if hooks fail
+parallel = false  # Run hooks sequentially
+verbose = true  # Show detailed output
+
+# Environment variables for hooks
+[environment]
+GIT_AUTHOR_NAME = "Claude Code"
+GIT_AUTHOR_EMAIL = "claude-code@anthropic.com"
+CLAUDE_HOOKS_ENABLED = "true"
+
+# Notification settings
+[notifications]
+success_emoji = "✅"
+failure_emoji = "❌"
+warning_emoji = "⚠️"
+info_emoji = "💡"
